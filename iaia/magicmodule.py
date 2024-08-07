@@ -1,19 +1,17 @@
 import sys
-from .findimports import find_imports
+import ast
 import subprocess
-from .gptclient import gpt_client
 import re
 import traceback
+from .engine_ollama import llm_engine
 
 package_names_for_module = {
     "bs4": "beautifulsoup4",
     "sklearn": "scikit-learn",
 }
 
-
 class MagicModule:
-    def __init__(self, gpt_engine="text-davinci-003"):
-        self.gpt_engine = gpt_engine
+    def __init__(self):
         # FIXME: all code appears to be in <string> and can't
         # be shown in tracebacks. Setting __file__ here doesn't
         # help, but sure what the answer is
@@ -80,22 +78,21 @@ class MagicFunction:
         signature = f"{self.name}({', '.join(sig)})"
         source = f"def {signature}:"
         prompt = f"""\
-Create a function named `{self.name}`:
+Create a function named `{self.name}`, do not add comments, just the Python code:
 
 ```
 {source}"""
         return prompt, source
 
     def get_completion(self, prompt, signature):
-        response = gpt_client.create_completion(
-            engine=self.module.gpt_engine,
+        response = llm_engine.generate_response(
             prompt=prompt,
             max_tokens=1000,
             temperature=0.1,
             stop=["```"],
         )
         # Sometimes it stops with two ` instead of three...?
-        response_source = response.choices[0].text.rstrip("`")
+        response_source = response["response"].rstrip("`")
         return signature + "\n" + response_source
 
     def make_function(self, *args, **kw):
@@ -104,8 +101,27 @@ Create a function named `{self.name}`:
         source = self.get_completion(prompt, signature)
         self.compile_function(key, source)
 
+
+    def try_compile(self,source_code):
+        try:
+            tree = ast.parse(source_code)
+        except SyntaxError as err:
+            source_code = self.fix_source(source_code, err) 
+        return source_code
+
+    def find_imports(sefl,source_code):
+        tree = ast.parse(source_code)
+        imports = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imports.append(node.names[0].name)
+            elif isinstance(node, ast.ImportFrom):
+                imports.append(node.module)
+        return imports
+
     def compile_function(self, key, source):
-        self.imports[key] = find_imports(source)
+        source = self.try_compile(source)
+        self.imports[key] = self.find_imports(source)
         missing = []
         for name in self.imports[key]:
             try:
@@ -156,12 +172,31 @@ At the line `{line.strip()}`
 The same function but with the {exc.__class__.__name__} exception fixed:
 
 ```"""
-        response = gpt_client.create_completion(
-            engine=self.module.gpt_engine,
+        response = llm_engine.generate_response(
             prompt=prompt,
             max_tokens=1000,
             temperature=0.1,
             stop=["```"],
         )
-        source = response.choices[0].text
+        source = response["response"]
         self.compile_function(key, source)
+
+    def fix_source(self, source, err:SyntaxError):
+        prompt = f"""\
+The following Python source code can not compile because of error  {err.msg} at line {err.lineno}:
+
+```
+{source}
+```
+
+Here is the same function but with the exception fixed:
+
+```"""
+        print(prompt)
+        response = llm_engine.generate_response(
+            prompt=prompt,
+            max_tokens=1000,
+            temperature=0.1,
+            stop=["```"],
+        )
+        return response["response"]

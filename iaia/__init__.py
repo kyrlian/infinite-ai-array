@@ -14,13 +14,6 @@ magic = sys.modules[__name__ + ".magic"] = MagicModule()
 
 def set_verbose(verbose=True):
     """Set verbose mode for all clients."""
-    from .gptclient import gpt_client
+    from .engine_ollama import llm_engine
 
-    gpt_client.verbose = verbose
-
-
-def set_gpt_key(key):
-    """Set the GPT-3 API key for all clients."""
-    from .gptclient import gpt_client
-
-    gpt_client.key = key
+    llm_engine.verbose = verbose

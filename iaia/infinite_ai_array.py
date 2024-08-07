@@ -3,22 +3,17 @@ from collections.abc import MutableSequence, MutableMapping
 import re
 from .inspectcontext import get_frame_source
 from .coercion import is_num, as_num
-from .gptclient import gpt_client
-
+from .engine_ollama import llm_engine
 
 class InfiniteAIArray(MutableSequence):
     def __init__(
         self,
         _iterable=None,
         *,
-        gpt_key=None,
-        gpt_engine="text-davinci-003",
         uplevel=0,
     ):
         self._list = list(_iterable or [])
         self._waiting_items = []
-        self.gpt_key = gpt_key
-        self.gpt_engine = gpt_engine
         self.max_gpt_context = 10
         self._max_easy_grow = 10
         self._max_tries = 6
@@ -110,22 +105,18 @@ class InfiniteAIArray(MutableSequence):
 {nums}
 {last_num + 2}.
     """.strip()
-            response = gpt_client.create_completion(
-                engine=self.gpt_engine,
+            response = llm_engine.generate_response(
                 prompt=prompt,
                 temperature=0.5,
                 max_tokens=12 * (needed + 1),
-                # top_p=1,
-                # frequency_penalty=0,
-                # presence_penalty=0,
             )
-            text = response.choices[0].text
+            text = response["response"]
             result = []
             has_empty_last_line = False
             for items in [self._fix_line(line) for line in text.splitlines()]:
                 result.extend(items)
                 has_empty_last_line = not items
-            finish_reason = response.choices[0].finish_reason
+            finish_reason = response["done_reason"]
             # The last item was cut off:
             if finish_reason == "length" and result and not has_empty_last_line:
                 result.pop()
@@ -239,17 +230,13 @@ class InfiniteAIDict(MutableMapping):
 {items}
 {last_num + 2}. {asking_key}:
 """.strip()
-        response = gpt_client.create_completion(
-            engine=self.gpt_engine,
+        response = llm_engine.generate_response(
             prompt=prompt,
             temperature=0.5,
             max_tokens=24,
             stop=["\n"],
-            # top_p=1,
-            # frequency_penalty=0,
-            # presence_penalty=0,
         )
-        text = response.choices[0].text
+        text = response["response"]
         # FIXME: should consider what to do if the last item was cut off
         text = text.strip()
         if self._type is None:
