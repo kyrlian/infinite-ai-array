@@ -100,7 +100,7 @@ class InfiniteAIArray(MutableSequence):
                 nums.append(f"{i + 1}. {item}")
                 last_num = i
             nums = "\n".join(nums)
-            prompt = f"""A list of {last_num + needed + 1} items, created with the code `{self._prompt_context}`:
+            prompt = f"""Please give a list of {last_num + needed + 1} items, created with the following code, do not add comments. `{self._prompt_context}`:
 
 {nums}
 {last_num + 2}.
@@ -167,12 +167,10 @@ class InfiniteAIDict(MutableMapping):
         self,
         _iterable=None,
         *,
-        gpt_engine="text-davinci-003",
         uplevel=0,
         ratelimit=5,
     ):
         self._dict = dict(_iterable or ())
-        self.gpt_engine = gpt_engine
         self.rate_limit = ratelimit
         # Really we don't need as much context as in a list because these are unordered and a few examples should do:
         self.max_gpt_context = 5
@@ -225,7 +223,7 @@ class InfiniteAIDict(MutableMapping):
             items.append(f"{i + 1}. {key}: {self._dict[key]}")
             last_num = i
         items = "\n".join(items)
-        prompt = f"""A list of name: value pairs, created with the code `{self._prompt_context}`:
+        prompt = f"""Please give a list of name: value pairs, created with the following code, do not add comments. `{self._prompt_context}`:
 
 {items}
 {last_num + 2}. {asking_key}:
